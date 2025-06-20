@@ -1,12 +1,10 @@
 const pool = require('../db/connection');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET;
+require('dotenv').config();
 
 module.exports = {
-    // Registro de usuário
-    
+    //Cadastro
     async register(req, res) {
         const { username, email, password } = req.body;
 
@@ -14,14 +12,17 @@ module.exports = {
             return res.status(400).json({ error: 'Preencha todos os campos' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-
         try {
-            const existingUser = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+            const existingUser = await pool.query(
+                'SELECT * FROM users WHERE email = $1',
+                [email]
+            );
 
             if (existingUser.rows.length > 0) {
-                return res.status(400).json({ error: 'Usuário já cadastrado' });
+                return res.status(400).json({ error: 'Email já cadastrado' });
             }
+
+            const hashedPassword = await bcrypt.hash(password, 10);
 
             await pool.query(
                 'INSERT INTO users (username, email, password) VALUES ($1, $2, $3)',
@@ -35,8 +36,7 @@ module.exports = {
         }
     },
 
-    //Login
-    
+    // Login
     async login(req, res) {
         const { email, password } = req.body;
 
@@ -45,7 +45,10 @@ module.exports = {
         }
 
         try {
-            const user = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+            const user = await pool.query(
+                'SELECT * FROM users WHERE email = $1',
+                [email]
+            );
 
             if (user.rows.length === 0) {
                 return res.status(400).json({ error: 'Usuário não encontrado' });
@@ -58,20 +61,35 @@ module.exports = {
             }
 
             const token = jwt.sign(
-                {
-                    id: user.rows[0].id,
-                    username: user.rows[0].username,
-                    email: user.rows[0].email
-                },
-                JWT_SECRET,
-                { expiresIn: '1h' }
+                { id: user.rows[0].id },
+                process.env.JWT_SECRET,
+                { expiresIn: '7d' }
             );
 
             res.json({
-                message: 'Login bem-sucedido',
+                message: 'Login realizado com sucesso',
                 token
             });
 
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Erro no servidor' });
+        }
+    },
+
+    // Perfil do usuário
+    async profile(req, res) {
+        try {
+            const user = await pool.query(
+                'SELECT id, username, email FROM users WHERE id = $1',
+                [req.user.id]
+            );
+
+            if (user.rows.length === 0) {
+                return res.status(404).json({ error: 'Usuário não encontrado' });
+            }
+
+            res.json(user.rows[0]);
         } catch (error) {
             console.error(error);
             res.status(500).json({ error: 'Erro no servidor' });
